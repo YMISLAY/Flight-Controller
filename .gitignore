@@ -1,0 +1,49 @@
+# ==================== Keil MDK 编译产物 ====================
+*.uvguix.*
+*.uvguix
+*.scvd
+*.dbgconf
+*.crf
+*.d
+*.o
+*.axf
+*.htm
+*.dep
+*.lnp
+*.iex
+*.sct
+*.fed
+*.lst
+*.build_log.htm
+*.map
+*.bin
+*.hex
+*.out
+*.elf
+
+# Keil 工程临时文件（保留 .uvprojx）
+*.uvoptx
+*.uvopt
+
+# Debug Config
+DebugConfig/
+
+# 编译输出目录
+Obj/
+Listings/
+
+# JLink
+JLinkLog.txt
+JLinkSettings.ini
+
+# ==================== IDE ====================
+.idea/
+
+# ==================== Windows ====================
+Thumbs.db
+Desktop.ini
+
+# ==================== 其他 ====================
+*.bak
+*.orig
+*.tmp

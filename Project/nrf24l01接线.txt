@@ -1,0 +1,8 @@
+VCC			3.3
+CSN			A15
+MOSI		B5
+IRQ			本代码使用查询的方式获取设备状态，因此不需要使用IRQ引脚
+GND		G
+CE			A8
+SCK			B3
+MISO		B4
