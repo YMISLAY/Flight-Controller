@@ -1,4 +1,4 @@
-﻿#ifndef __BIQUAD_FILTER_H
+#ifndef __BIQUAD_FILTER_H
 #define __BIQUAD_FILTER_H
 
 #include <stdint.h>
@@ -10,7 +10,7 @@ typedef struct {
     float w1, w2;       // 延迟状态
 } BiquadFilter;
 
-/**
+/*
  * @brief 初始化二阶 Butterworth 低通滤波器
  * @param filt   滤波器实例指针
  * @param cutoff 截止频率（Hz），推荐值：30~40 Hz（F330 + 8寸桨）

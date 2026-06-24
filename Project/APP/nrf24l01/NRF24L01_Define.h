@@ -1,4 +1,4 @@
-﻿#ifndef __NRF24L01_DEFINE_H
+#ifndef __NRF24L01_DEFINE_H
 #define __NRF24L01_DEFINE_H
 
 /*NRF24L01指令宏定义*/
@@ -45,5 +45,3 @@
 #endif
 
 
-/*****************江协科技|版权所有****************/
-/*****************jiangxiekeji.com*****************/

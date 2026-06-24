@@ -1,4 +1,15 @@
-﻿#include "system.h"
+/**
+ * @file    main.c
+ * @brief   Quadcopter flight controller — init, main loop, TIM4 ISR, failsafe.
+ *
+ * Hardware:  STM32F407ZGTx @ 168 MHz | MPU6050 (I²C+DMP) | FlySky i6 (IBUS)
+ *            USART1=printf, USART3=Serial Plot (DMA), USART6=IBUS (DMA)
+ *
+ * Control:   Main loop does attitude + IBUS + debug logging
+ *            TIM4 ISR at 200 Hz does cascaded PID (100 Hz outer / 200 Hz inner)
+ */
+
+#include "system.h"
 #include "SysTick.h"
 #include "usart.h"
 #include "biquad_filter.h"
@@ -13,11 +24,11 @@
 #include "timer.h"
 #include "pwm.h"
 #include "main.h"
-#include "math.h"
+#include <math.h>
 #include "ibus.h"
 #include <stdio.h>
 
-volatile uint8_t diantiao_flag = 0;        // diantiao_flag为0时停止控制更新，不输出电机信号
+volatile uint8_t flight_control_active = 0;        // diantiao_flag为0时停止控制更新，不输出电机信号
 volatile uint8_t flight_failsafe = 0;      // pitch角度/角速度超限触发保护
 volatile uint8_t esc_output_enable = 0;    // 电调输出使能，MPU校准完成前不向中断写PWM
 
@@ -138,12 +149,11 @@ int main()
     USART6_Init(115200);   // 串口6：遥控器 IBUS
 
     usart1_send_char(1);
-
     IBUS_Init();
     LED_Init();
     KEY_Init();
 
-    TIM5_CH1_PWM_Init(19999, 168 - 1);    // 定时器5输出PWM
+    TIM5_PWM_Init(19999, 168 - 1);    // 定时器5输出PWM
     TIM4_Init(5000 - 1, 84 - 1);          // 定时器4控制中断
 
     FlightController_Init(&flight_controller);
@@ -173,10 +183,9 @@ int main()
 
     // MPU 稳定后校准
     MPU6050_Calibrate_Gyro();
-
-    diantiao_start();
+    esc_start_signal();
     esc_output_enable = 1;
-    diantiao_flag = 1;
+    flight_control_active = 1;
 
     printf("LPF init: cutoff=%.1f Hz, fs=%.1f Hz\r\n",
            GYRO_LPF_CUTOFF_HZ,
@@ -207,12 +216,10 @@ int main()
             attitude_buffer.pitch = pitch;
             attitude_buffer.roll = roll;
             attitude_buffer.yaw = yaw;
-
             // 陀螺仪原始值转换为 deg/s
             gyro_x_dps = (float)gyrox / GYRO_SCALE_FACTOR;
             gyro_y_dps = (float)gyroy / GYRO_SCALE_FACTOR;
             gyro_z_dps = (float)gyroz / GYRO_SCALE_FACTOR;
-
             // 应用二阶 Butterworth 低通滤波
             gyro_x_dps = Biquad_Update(&gyro_filter_x, gyro_x_dps);
             gyro_y_dps = Biquad_Update(&gyro_filter_y, gyro_y_dps);
@@ -239,9 +246,9 @@ int main()
 
             // 摇杆安全通道<1020时，没有故障且角度正常时，才会开启飞控更新控制
             if ((safe_flag < 1020) && (flight_failsafe == 0)) {
-                diantiao_flag = 1;
+                flight_control_active = 1;
             } else {
-                diantiao_flag = 0;
+                flight_control_active = 0;
             }
 
             /*
@@ -282,21 +289,6 @@ int main()
             enqueue_debug_frame(&frame);
         }
 
-        /* ========== ASCII 调试数据发送（配合 Serial Plot）==========
-         * 配合串口绘图器使用。
-         * 每 DEBUG_SEND_INTERVAL_MS 发送一帧。
-         * 发送顺序：
-         * target_pitch,
-         * current_pitch,
-         * pitch_angle_error,
-         * pitch_rate_target_raw,
-         * pitch_rate_target_out,
-         * current_pitch_rate,
-         * pitch_rate_p_out,
-         * pitch_rate_output,
-         * motor_pitch_diff,
-         * throttle
-         */
         static uint32_t last_debug_send_time = 0;
         uint32_t now2 = HAL_GetTick();
         if (now2 - last_debug_send_time >= DEBUG_SEND_INTERVAL_MS) {
@@ -336,42 +328,38 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
     if (htim->Instance == TIM4)
     {
-        // MPU校准完成并执行diantiao_start之前，不在TIM4中断写电机PWM
+        // MPU校准完成并执行esc_start_signal之前，不在TIM4中断写电机PWM
         if (esc_output_enable == 0) {
             return;
         }
-
         // 故障保护。一旦 flight_failsafe 变为 1，飞控在解锁前强制保持停机
         if (flight_failsafe) {
-            diantiao_flag = 0;
+            flight_control_active = 0;
         }
-
         // 检查 Pitch 安全检查（同步检查 Roll 安全）
         float roll_err = target_roll - current_attitude.roll;
         // Pitch 安全检查
         float pitch_err = target_pitch - current_attitude.pitch;
-
-        if (diantiao_flag == 1) {
+        if (flight_control_active == 1) {
             if (fabsf(pitch_err) >= PITCH_ANGLE_FAILSAFE_DEG) {
                 flight_failsafe = 1;
-                diantiao_flag = 0;
+                flight_control_active = 0;
             }
             if (fabsf(current_attitude.pitch_rate) >= PITCH_RATE_FAILSAFE_DPS) {
                 flight_failsafe = 1;
-                diantiao_flag = 0;
+                flight_control_active = 0;
             }
             if (fabsf(roll_err) >= PITCH_ANGLE_FAILSAFE_DEG) {
                 flight_failsafe = 1;
-                diantiao_flag = 0;
+                flight_control_active = 0;
             }
             if (fabsf(current_attitude.roll_rate) >= PITCH_RATE_FAILSAFE_DPS) {
                 flight_failsafe = 1;
-                diantiao_flag = 0;
+                flight_control_active = 0;
             }
         }
-
-        // diantiao_flag 为 0 时停止控制更新，不输出电机信号
-        if (diantiao_flag == 0) {
+        // flight_control_active 为 0 时停止控制更新，不输出电机信号
+        if (flight_control_active == 0) {
             if (!stopped) {
                 FlightController_Stop(&flight_controller);
                 stopped = 1;
@@ -382,22 +370,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             TIM5_SetCompare4(500);
             return;
         }
-
-        if (diantiao_flag == 1) {
+        if (flight_control_active == 1) {
             static uint8_t loop_cnt = 0;
             stopped = 0;
-
             flight_controller.throttle = throttle;
-
             // 外环 100Hz，每两次中断跑一次
             if ((loop_cnt & 1) == 0) {
                 FlightController_Update_Outer(&flight_controller, &current_attitude,
                                target_roll, target_pitch, target_yaw, OUTER_LOOP_DT);
             }
-
             // 内环 200Hz，每次都跑
             FlightController_Update_Inner(&flight_controller, &current_attitude, INNER_LOOP_DT);
-
             loop_cnt++;
             if (loop_cnt > 200)
                 loop_cnt = 1;
@@ -413,7 +396,7 @@ void USART6_Receive_Callback(u8 data)
     }
 }
 
-void diantiao_init(void)
+void esc_init_sequence(void)
 {
     TIM5_SetCompare1(1999);
     TIM5_SetCompare2(1999);
@@ -427,17 +410,17 @@ void diantiao_init(void)
     TIM5_SetCompare4(1000);
     HAL_Delay(5000);
 
-    printf("diaotiao_init success\n");
+    printf("esc_init_sequence success\n");
 }
 
-void diantiao_start(void)
+void esc_start_signal(void)
 {
     TIM5_SetCompare1(500);
     TIM5_SetCompare2(500);
     TIM5_SetCompare3(500);
     TIM5_SetCompare4(500);
 
-    printf("diaotiao_start success\n");
+    printf("esc_start_signal success\n");
     HAL_Delay(2000);
 }
 

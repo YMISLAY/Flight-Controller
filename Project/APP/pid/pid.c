@@ -1,3 +1,8 @@
+/**
+ * @file    pid.c
+ * @brief   PID controller implementation with two D-term strategies.
+ */
+ 
 #include "pid.h"
 #include <math.h>
 #include "usart.h"
@@ -41,13 +46,10 @@ float PID_Update(PID_Controller* pid,
     if (dt <= 0.0f) {
         return pid->output;
     }
-
     float error = setpoint - measurement;
-
     // P
     float proportional = pid->kp * error;
     pid->p_out = proportional;
-
     // I
     pid->integral += error * dt;
     if (pid->integral > pid->integral_limit) {
@@ -60,17 +62,17 @@ float PID_Update(PID_Controller* pid,
 
     // D on error
     float derivative = 0.0f;
-    //if (!pid->initialized) {
-    //    pid->prev_error = error;
-    //    pid->prev_measurement = measurement;
-    //    pid->initialized = 1;
-    //    derivative = 0.0f;
-    //} else {
+    if (!pid->initialized) {
+        pid->prev_error = error;
+        pid->prev_measurement = measurement;
+        pid->initialized = 1;
+        derivative = 0.0f;
+    } else {
         derivative = pid->kd * (error - pid->prev_error) / dt;
-    //}
+    }
     pid->d_out = derivative;
-    //pid->mes = error;
-    //pid->premes = pid->prev_error;
+    pid->mes = error;
+    pid->premes = pid->prev_error;
     pid->prev_error = error;
     pid->prev_measurement = measurement;
 
@@ -130,22 +132,20 @@ float PID_Update_D_On_Measurement(PID_Controller* pid,
 
     // D on measurement（跳过第一次初始化跳变）
     float derivative = 0.0f;
-    //if (!pid->initialized) {
-    //    pid->prev_measurement = measurement;
-    //    pid->prev_error = error;
-    //    pid->initialized = 1;
-    //    derivative = 0.0f;
-    //} else {
+    if (!pid->initialized) {
+        pid->prev_measurement = measurement;
+        pid->prev_error = error;
+        pid->initialized = 1;
+        derivative = 0.0f;
+    } else {
         derivative = -pid->kd * (measurement - pid->prev_measurement) / dt;
-
-        // D 一阶低通滤波，截止约20Hz@100Hz
-        pid->d_filtered = 0.12f * derivative + 0.88f * pid->d_filtered;
-        derivative = pid->d_filtered;
-    //}
+    // D 一阶低通滤波，截止约20Hz@100Hz
+    pid->d_filtered = 0.12f * derivative + 0.88f * pid->d_filtered;
+    derivative = pid->d_filtered;
+    }
     pid->d_out = derivative;
     pid->prev_measurement = measurement;
     pid->prev_error = error;
-
     // Output
     pid->output = proportional + integral + derivative;
     if (pid->output > pid->output_limit) {
@@ -161,7 +161,6 @@ float PID_Update_D_On_Measurement(PID_Controller* pid,
     if (fabsf(error) > fabsf(pid->max_error)) {
         pid->max_error = error;
     }
-
     return pid->output;
 }
 

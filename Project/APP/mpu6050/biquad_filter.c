@@ -1,9 +1,14 @@
-﻿#include "biquad_filter.h"
+/**
+ * @file    biquad_filter.c
+ * @brief   Butterworth LPF via bilinear transform — transposed DF-II.
+ */
+
+#include "biquad_filter.h"
 #include <stddef.h>  // 提供 NULL 标识
 #include <math.h>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846f
+#define M_PI 3.141592653589793f
 #endif
 
 /* 计算二阶 Butterworth 低通滤波器系数（双线性变换法） */
@@ -28,16 +33,13 @@ int Biquad_LowPass_Init(BiquadFilter *filt, float cutoff, float fs)
 {
     if (filt == NULL || cutoff <= 0.0f || fs <= 0.0f || cutoff >= fs / 2.0f)
         return -1;
-
     calc_butterworth_lpf_coeffs(cutoff, fs,
                                 &filt->b0, &filt->b1, &filt->b2,
                                 &filt->a1, &filt->a2);
-
     filt->w1 = 0.0f;
     filt->w2 = 0.0f;
     return 0;
 }
-
 float Biquad_Update(BiquadFilter *filt, float input)
 {
     // 转置直接Ⅱ型结构，数值稳定性好，仅存两个状态变量

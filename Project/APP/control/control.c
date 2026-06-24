@@ -1,14 +1,19 @@
-﻿#include "control.h"
+/**
+ * @file    control.c
+ * @brief   Flight controller — cascaded angle/rate PID loops and X-mixer.
+ *
+ * Loop rates:
+ *   Outer (angle → rate target):  100 Hz  (every other TIM4 interrupt)
+ *   Inner (rate  → motor output): 200 Hz  (every TIM4 interrupt)
+ */
+
+#include "control.h"
 #include "motor.h"
 #include "usart.h"
 
 // ==================== PID 参数 ====================
 
-/*
- * 角度环 PID
- * 目前只调试了 Pitch 角度外环，
- * Roll / Yaw 暂时置零，对应同时调试会导致电机发烫。
- */
+//PID参数
 #define PITCH_ANGLE_KP  2.0f
 #define PITCH_ANGLE_KI  0.0f
 #define PITCH_ANGLE_KD  0.0f
@@ -52,7 +57,6 @@ static float constrain_float(float value, float min_value, float max_value)
  * current:   当前已经逼近的目标值
  * max_step:  单次调节允许的最大变化步长
  * 返回：     限制变化率后的目标值
- *
  * 用途：
  *     限制 Pitch 目标角速度变化率，
  *     避免外环输出角速度目标突然阶跃。
@@ -69,18 +73,14 @@ static float slew_limit_float(float target, float current, float max_step)
 }
 
 // ==================== 飞控初始化 ====================
-
 void FlightController_Init(FlightController* fc)
 {
-    if (fc == 0) {
+    if (fc == NULL) {
         return;
     }
-
     /*
      * 初始化角度环 PID
-     * 注意：
      * Pitch 角度环输出，单位是 deg/s，
-     * 也就是要传给角速度内环的目标角速度。
      * Pitch 角度环输出限幅建议先小一些，
      * 逐步放开，上限用 MAX_PITCH_RATE_DPS 控制。
      * 变量 pitch_rate_target_raw 能反映外环原始输出值。
@@ -114,7 +114,7 @@ void FlightController_Init(FlightController* fc)
              ROLL_RATE_KI,
              ROLL_RATE_KD,
              100.0f,
-             100.0f);
+             160.0f);
 
     PID_Init(&fc->pitch_rate_pid,
              PITCH_RATE_KP,
@@ -136,34 +136,28 @@ void FlightController_Init(FlightController* fc)
     fc->pitch_rate_target_limited = 0.0f;
     fc->pitch_rate_target_out = 0.0f;
     fc->pitch_rate_output = 0.0f;
-
     for (int i = 0; i < 4; i++) {
         fc->motor_outputs[i] = 0.0f;
     }
-
     motor_pitch_diff = 0;
 }
 
 // ==================== PID 复位 ====================
-
 void FlightController_ResetPID(FlightController* fc)
 {
-    if (fc == 0) {
+    if (fc == NULL) {
         return;
     }
-
     PID_Reset(&fc->roll_angle_pid);
     PID_Reset(&fc->pitch_angle_pid);
     PID_Reset(&fc->yaw_angle_pid);
     PID_Reset(&fc->roll_rate_pid);
     PID_Reset(&fc->pitch_rate_pid);
     PID_Reset(&fc->yaw_rate_pid);
-
     /*
      * 复位外环 / 斜率 / 内环状态，
      * 主要是防止：
-     * 停机再解锁定高时，残留 pitch_rate_target_out
-     * 导致斜率状态被保持成目标角速度。
+     * 停机再解锁定高时，残留 pitch_rate_target_out，导致斜率状态被保持成目标角速度。
      */
     fc->pitch_angle_error = 0.0f;
     fc->pitch_rate_target_raw = 0.0f;
@@ -174,21 +168,17 @@ void FlightController_ResetPID(FlightController* fc)
 }
 
 // ==================== 停机控制 ====================
-
 void FlightController_Stop(FlightController* fc)
 {
-    if (fc == 0) {
+    if (fc == NULL) {
         return;
     }
-
     FlightController_ResetPID(fc);
-
     fc->throttle = 0.0f;
     for (int i = 0; i < 4; i++) {
         fc->motor_outputs[i] = 0.0f;
     }
     motor_pitch_diff = 0;
-
     /*
      * 此处仅 Motor_SetOutput 清空软件变量，
      * main.c 停机分支仍然自己调用 TIM5_SetCompareX(500)
@@ -198,12 +188,11 @@ void FlightController_Stop(FlightController* fc)
 }
 
 // ========== 外环：角度 → 角速度目标（100Hz） ==========
-
 void FlightController_Update_Outer(FlightController* fc, DroneAttitude* attitude,
                                    float target_roll,
                                    float target_pitch, float target_yaw, float dt)
 {
-    if (fc == 0 || attitude == 0 || dt <= 0.0f) return;
+    if (fc == NULL || attitude == 0 || dt <= 0.0f) return;
 
 #if PITCH_RATE_TEST_MODE
     fc->pitch_angle_error = 0.0f;
@@ -215,12 +204,10 @@ void FlightController_Update_Outer(FlightController* fc, DroneAttitude* attitude
                                            attitude->pitch,
                                            dt);
 #endif
-
     // 限幅
     fc->pitch_rate_target_limited = constrain_float(fc->pitch_rate_target_raw,
                                                     -MAX_PITCH_RATE_DPS,
                                                      MAX_PITCH_RATE_DPS);
-
     // 斜率限制
     {
         float max_step = PITCH_RATE_TARGET_SLEW_DPS2 * dt;
@@ -228,77 +215,45 @@ void FlightController_Update_Outer(FlightController* fc, DroneAttitude* attitude
                                                      fc->pitch_rate_target_out,
                                                      max_step);
     }
-
     // ===== Roll 外环（暂未调试）=====
     PID_Update(&fc->roll_angle_pid, target_roll, attitude->roll, dt);
-
     // Yaw 外环（目前输出为0）
     PID_Update(&fc->yaw_angle_pid, target_yaw, attitude->yaw, dt);
 }
 
 // ========== 内环：角速度 → 电机输出（200Hz） ==========
-
 void FlightController_Update_Inner(FlightController* fc, DroneAttitude* attitude, float dt)
 {
-    if (fc == 0 || attitude == 0 || dt <= 0.0f) return;
+    if (fc == NULL || attitude == 0 || dt <= 0.0f) return;
 
     // Roll 角速度目标 = Roll 外环 PID 输出
     float roll_rate_target = fc->roll_angle_pid.output;
-
     // Yaw 外环输出（暂时用了外环不要动）
     float yaw_rate_target = fc->yaw_angle_pid.output;
-
     // Roll / Pitch / Yaw 角速度内环
     float roll_output = PID_Update_D_On_Measurement(&fc->roll_rate_pid,
                                                     roll_rate_target,
                                                     attitude->roll_rate,
                                                     dt);
-
     float pitch_output = PID_Update_D_On_Measurement(&fc->pitch_rate_pid,
                                                      fc->pitch_rate_target_out,
                                                      attitude->pitch_rate,
                                                      dt);
-
     float yaw_output = PID_Update_D_On_Measurement(&fc->yaw_rate_pid,
                                                    yaw_rate_target,
                                                    attitude->yaw_rate,
                                                    dt);
-
     fc->pitch_rate_output = pitch_output;
-
     // X 型混控
     fc->motor_outputs[0] = fc->throttle + pitch_output - roll_output + yaw_output;
     fc->motor_outputs[1] = fc->throttle + pitch_output + roll_output - yaw_output;
     fc->motor_outputs[2] = fc->throttle - pitch_output - roll_output - yaw_output;
     fc->motor_outputs[3] = fc->throttle - pitch_output + roll_output + yaw_output;
 
-    /*
-     * X 型无人机电机布局：
-     *
-     *        1       2
-     *          \   /
-     *           \ /
-     *           / \
-     *          /   \
-     *        3       4
-     *
-     * 1 - 右前  motor_outputs[0]
-     * 2 - 左前  motor_outputs[1]
-     * 3 - 右后  motor_outputs[2]
-     * 4 - 左后  motor_outputs[3]
-     *
-     * Pitch 控制：
-     *     pitch_output 为正时，
-     *         前电机加速，
-     *         后电机减速。
-     */
-
     for (int i = 0; i < 4; i++) {
         fc->motor_outputs[i] = constrain_float(fc->motor_outputs[i], 0.0f, 1000.0f);
     }
-
     motor_pitch_diff = (int16_t)((fc->motor_outputs[0] + fc->motor_outputs[1]
                                   - fc->motor_outputs[2] - fc->motor_outputs[3]) / 2.0f);
-
     Motor_SetOutput(fc->motor_outputs);
 }

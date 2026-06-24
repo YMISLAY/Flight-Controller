@@ -1,12 +1,15 @@
-﻿/* Define to prevent recursive inclusion -------------------------------------*/
+/**
+ * @file    main.h
+ * @brief   Flight controller global constants and shared declarations.
+ */
 #ifndef __MAIN_H
 #define __MAIN_H
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 
-void diantiao_init(void);
-void diantiao_start(void);
+void esc_init_sequence(void);
+void esc_start_signal(void);
 void MPU6050_Calibrate_Gyro(void);
 
 #define GYRO_SCALE_FACTOR       16.4f                   // 对应±2000dps量程
@@ -30,10 +33,7 @@ extern float gyro_z_dps;
 #define PITCH_ANGLE_FAILSAFE_DEG    45.0f
 #define PITCH_RATE_FAILSAFE_DPS     150.0f
 
-/* Exported types ------------------------------------------------------------*/
-/* Exported constants --------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
-/* Exported functions ------------------------------------------------------- */
+
 
 #endif /* __MAIN_H */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

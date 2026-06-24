@@ -1,4 +1,9 @@
-﻿#include "mpu6050.h"
+/**
+ * @file    mpu6050.c
+ * @brief   MPU6050 IMU — I²C access, config (gyro ±2000 dps, accel ±2 g, 500 Hz).
+ */
+
+#include "mpu6050.h"
 #include "SysTick.h"
 #include "usart.h"
 
@@ -17,7 +22,7 @@ u8 MPU6050_Init(void)
 
     MPU6050_Set_Gyro_Fsr(3);                    // 陀螺仪传感器, ±2000dps
     MPU6050_Set_Accel_Fsr(0);                   // 加速度传感器, ±2g
-    MPU6050_Set_Rate(500);                      // 修改：设置采样率500Hz
+    MPU6050_Set_Rate(500);                      // 设置采样率500Hz
     MPU6050_Write_Byte(MPU6050_INT_EN_REG, 0X00);  // 关闭所有中断
     MPU6050_Write_Byte(MPU6050_USER_CTRL_REG, 0X00); // I2C主模式关闭
     MPU6050_Write_Byte(MPU6050_FIFO_EN_REG, 0X00);   // 关闭FIFO
@@ -28,7 +33,7 @@ u8 MPU6050_Init(void)
     {
         MPU6050_Write_Byte(MPU6050_PWR_MGMT1_REG, 0X01); // 设置CLKSEL, PLL X轴为参考
         MPU6050_Write_Byte(MPU6050_PWR_MGMT2_REG, 0X00); // 加速度与陀螺仪都工作
-        MPU6050_Set_Rate(500);                   // 修改：设置采样率为500Hz, 原低通滤波42HZ
+        MPU6050_Set_Rate(500);                   // 设置采样率为500Hz, 低通滤波42HZ
     }
     else
         return 1;

@@ -1,4 +1,18 @@
-﻿#ifndef __PID_H
+/**
+ * @file    pid.h
+ * @brief   PID controller interface — supports standard form and
+ *          derivative-on-measurement for angular rate loops.
+ *
+ * Two PID update variants are provided:
+ *   - PID_Update():         D acts on error (suitable for angle outer loop)
+ *   - PID_Update_D_On_Measurement():  D acts on measurement (recommended for
+ *                                     angular-rate inner loop to avoid
+ *                                     derivative kick on setpoint steps)
+ *
+ * All controllers include integral anti-windup (clamping) and output limiting.
+ */
+
+#ifndef __PID_H
 #define __PID_H
 
 #include "stm32f4xx.h"
@@ -19,10 +33,9 @@ typedef struct {
     float p_out;              // P 项输出
     float i_out;              // I 项输出
     float d_out;              // D 项输出
-
     float d_filtered;         // D 项滤波值
-    float mes;
-    float premes;
+    float mes;                //PID计算时当前数据
+	  float premes;             //PID计算时上一次数据
     float max_output;         // 峰值输出
     float max_error;          // 峰值误差
     uint32_t reset_time;      // 预留
@@ -34,7 +47,6 @@ void PID_Init(PID_Controller* pid,
               float kd,
               float integral_limit,
               float output_limit);
-
 /*
  * 普通 PID
  * D 对 error 微分
@@ -44,7 +56,6 @@ float PID_Update(PID_Controller* pid,
                  float setpoint,
                  float measurement,
                  float dt);
-
 /*
  * D on measurement PID
  * D 对 measurement 微分
@@ -54,13 +65,11 @@ float PID_Update_D_On_Measurement(PID_Controller* pid,
                                   float setpoint,
                                   float measurement,
                                   float dt);
-
 /*
  * 复位所有 PID
  * 停机、解锁或模式切换时使用
  */
 void PID_Reset(PID_Controller* pid);
-
 /*
  * 打印并重置峰值记录
  */
