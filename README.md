@@ -86,7 +86,8 @@
 │   ├── CMSIS/          # Cortex-M4 CMSIS
 │   └── STM32F4xx_HAL_Driver/  # HAL 库
 ├── 姿态参数/           # PID调参时的姿态数据（CSV）
-└── 新姿态参数/         # 优化代码后的新PID参数的调试数据（CSV）
+├── 新姿态参数/         # 优化代码后的新PID参数的调试数据（CSV）
+└── tools/              # 调试工具（见 GitHub Releases）
 ```
 
 ## 编译和烧录
@@ -113,9 +114,20 @@
 | USART3 | PB10(TX), PB11(RX) | 蓝牙/SerialPlot 数据发送 |
 | USART6 | PC6(TX), PC7(RX) | IBUS 遥控器接收 |
 
+## 调试工具下载
+
+推荐使用以下工具进行飞控数据可视化与姿态监视（下载地址见 [GitHub Releases](https://github.com/YMISLAY/Flight-Controller/releases)）：
+
+| 工具 | 版本 | 用途 |
+|------|------|------|
+| SerialPlot | v0.12.0 | CSV 实时波形查看，观察传感器及 PID 各环节数据 |
+| ANO_Tech 匿名四轴上位机 | V2.6 | 3D 姿态可视化、虚拟仪表、飞控参数监视 |
+
+> 也可从各自官网下载：SerialPlot 见 [hackaday.io](https://hackaday.io/project/5334-serialplot)，匿名上位机见 [淘宝/匿名科创社区](https://github.com/geekplux/ANO-Tech)。
+
 ## 调试数据格式
 
-USART3 以 115200 波特率输出 CSV 格式的调试数据帧（20ms/帧），可用 [SerialPlot](https://hackaday.io/project/5334-serialplot) 软件实时查看波形。
+USART3 以 115200 波特率输出 CSV 格式的调试数据帧（20ms/帧），可用 SerialPlot 实时查看波形。
 
 ### 数据帧格式（12通道）
 
@@ -161,7 +173,7 @@ pitch_rate_output, motor_pitch_diff, throttle, d_out, i_out
 
 ## 已知问题和待改进
 
-- [ ] 目前已完成地面测试（姿态跟随、电机响应），可以达到实际飞行，但是pid参数控制效果可进一步优化
+- [ ] 已完成地面测试（姿态跟随、电机响应），PID 参数可进一步优化，之后进行实际飞行测试
 - [ ] 飞控上电后需要保持静止等待陀螺仪校准完成（约5秒）
 - [ ] DMP 姿态角在剧烈机动时可能存在漂移，考虑引入互补滤波/扩展卡尔曼滤波
 - [ ] I2C 通信缺少超时重试机制
@@ -173,7 +185,7 @@ pitch_rate_output, motor_pitch_diff, throttle, d_out, i_out
 - 2025年8月：实现 IBUS 遥控器协议解析，PWM 电机驱动
 - 2025年8-12月：串级 PID 控制器开发与调参，增加低通滤波和保护逻辑
 - 2026年3-6月：蓝牙串口调试功能，大量调参测试（见姿态参数数据）
-- 2026年6月：代码整理，准备上传 GitHub
+- 2026年6月：代码整理与优化，规范命名及注释，上传 GitHub 发布 v2.0
 
 ## 许可证
 
